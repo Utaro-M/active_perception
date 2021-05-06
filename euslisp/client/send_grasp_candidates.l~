@@ -1,0 +1,24 @@
+#!/usr/bin/env roseus
+
+;; (ros::load-ros-manifest "rm_debris_vision")
+(require "function.l")
+(ros::roseus "display_grasp_points")
+
+(defun call-back (msg)
+  (setq points msg)
+  (setq point-list (send points :polygon :points))
+  (setq vertices (mapcar #'(lambda (vertice) (scale 1000 (float-vector (send vertice :x) (send vertice :y) (send vertice :z)))) point-list))
+  (setq my-plane (make-prism vertices 10))
+
+  (setq com-tmp (send my-plane :centroid))
+  (setq com-save (scale 0.5 (v+ com-tmp com-pre)))
+  (setq com-pre com-tmp)
+
+  (setq normal-vec (send (elt (send my-plane :get-face :prism :top) 0) :normal))
+  (setq normal-vec-save (scale 0.5 (v+ normal-vec normal-vec-pre)))
+  (setq normal-vec-pre normal-vec)
+
+  )
+(defun send-grasp-candidates()
+  )
+(ros::subscribe "get_plane/focus_plane" geometry_msgs::PolygonStamped #'call-back)
