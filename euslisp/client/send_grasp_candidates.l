@@ -1,5 +1,6 @@
 #!/usr/bin/env roseus
 
+;; put_points_on_image.py
 (ros::load-ros-manifest "rm_debris_vision")
 (require "../../../rm_debris/rm_board/euslisp/functions.l")
 (require "../../../rm_debris/rm_board/euslisp/client/make_plane_for_opt.l ")
@@ -23,35 +24,29 @@
     (setq candidates-coords-list (list))
     (dotimes (i (length hands-interval))
       (setq coords-tmp (auto-set-reaching-targets-each-hand :pos-shift (elt hands-interval i)))
-      ;; (setq candidates-coords-list (append (list coords-tmp) candidates-coords-list))
       (setq candidates-coords-list (list-insert coords-tmp 100 candidates-coords-list))
-      ;; (format t "coords-tmp = ~A~%" coords-tmp)
-      ;; (setq l-pos (send (send (elt coords-tmp 0) :copy-worldcoords) :worldpos))
-      ;; (setq r-pos (send (send (elt coords-tmp 1) :copy-worldcoords) :worldpos))
-
-      (setq l-pos-wrt (send (send (elt coords-tmp 0) :copy-worldcoords) :worldpos))
-      (setq r-pos-wrt (send (send (elt coords-tmp 1) :copy-worldcoords) :worldpos))
+      
       (setq waist-coords (send (car (send *robot* :links)) :copy-worldcoords))
+      
+      (setq l-pos-wrt (send (send (elt coords-tmp 0) :copy-worldcoords) :worldpos))      
       (setq l-pos (send waist-coords :inverse-transform-vector l-pos-wrt)) ;; transformed BODY frame
-      (setq r-pos (send waist-coords :inverse-transform-vector r-pos-wrt)) ;; transformed BODY frame
-
       (setq point-l (instance  geometry_msgs::Point32 :init)) ;; left
       (send point-l :x (elt l-pos 0))
       (send point-l :y (elt l-pos 1))
       (send point-l :z (elt l-pos 2))
 
+      (setq r-pos-wrt (send (send (elt coords-tmp 1) :copy-worldcoords) :worldpos))      
+      (setq r-pos (send waist-coords :inverse-transform-vector r-pos-wrt)) ;; transformed BODY frame      
       (setq point-r (instance  geometry_msgs::Point32 :init)) ;; right
       (send point-r :x (elt r-pos 0))
       (send point-r :y (elt r-pos 1))
       (send point-r :z (elt r-pos 2))
       
       (format t "point-l=~A~%" point-l)
-      ;; (setq points-l-list (append (list point-l) points-l-list))
-      ;; (setq points-r-list (append (list point-r) points-r-list))
       (setq points-l-list (list-insert point-l 100 points-l-list))
-      (setq points-r-list (list-insert point-r 100 points-r-list))
-      
+      (setq points-r-list (list-insert point-r 100 points-r-list))      
       )
+    ;; request
     (send req :l_points points-l-list)
     (send req :r_points points-r-list)
     (send frame_id :data "BODY")
@@ -67,30 +62,28 @@
   (if (send req :flag) ;; True: return cnadidates
       (send-grasp-candidates :hands-interval (send req :data))
 
-    (progn ;; False solve ik
+    (progn ;; False: solve ik
       (format t "req = ~A~%" (elt (send req :data) 0))
-      ;; (setq coords-list (list (elt candidates-coords-list (* 2 (elt (send req :data) 0))) (elt candidates-coords-list (+ (* 2 (elt (send req :data) 0)) 1))))
       (setq coords-list (list (elt (elt candidates-coords-list (elt (send req :data) 0)) 0) (elt (elt candidates-coords-list (elt (send req :data) 0)) 1)))
       (format t "coords-list = ~A~% " coords-list)
       (send *robot* :angle-vector (send *ri* :state :angle-vector))
       (reset-coords)
       ;; (ik-opt (elt coords-list 0) (elt coords-list 1) :only-kinematics nil  :optimize-torque? nil :fix-contact? 2 :avoid-collision? t :apply-external-force? nil :wait? t :rleg-pos-shift #f(0 0 0) :lleg-pos-shift #f(0 0 0)   :set-unique-kin-scale? t :obst? nil)
       ;; (send *robot-env* :dissoc-root-virtual)
-      (ik (elt coords-list 0) (elt coords-list 1))
-
+      (ik (elt coords-list 0) (elt coords-list 1)) ;; general ik
       (send-pose-and-move-on-foot :time 8000 :send? t :fix-contact? 2   :look-at-object? nil)
       )
     )
   (format t "receive trigger_with_data")
   )
 
+;; general ik
 (defun ik(larm rarm)
   (send *robot* :fullbody-inverse-kinematics
         (list (send *robot* :rleg :end-coords :copy-worldcoords)
               (send *robot* :lleg :end-coords :copy-worldcoords)
               larm
-              rarm
-              )
+              rarm)
         :move-target
         (list (send *robot* :rleg :end-coords)
               (send *robot* :lleg :end-coords)
@@ -111,6 +104,7 @@
   (send *irtviewer* :draw-objects))
 
 (ros::advertise-service "joy_trigger" rm_debris_vision::TriggerWithData #'cb)
+
 (do-until-key
   (ros::spin-once)
  )
